@@ -1,0 +1,11 @@
+
+version: '3'
+
+services:
+  jenkins:
+    image: nancy_jenkins:latest
+    ports:
+      - "8080:8081"
+    build:
+      dockerfile: Dockerfile-jenkins
+  
