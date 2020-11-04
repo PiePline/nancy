@@ -1,10 +1,10 @@
 ## This docker build script was stolen from https://habr.com/ru/post/481466/
 ## Thank you rmuhamedgaliev!
 
-FROM jenkins/jenkins:lts
+FROM jenkins/jenkins:latest
 
 ARG DOCKER_COMPOSE_VERSION=1.25.0
-
+ 
 USER root
 RUN apt-get update && \
    apt-get upgrade -y && \
