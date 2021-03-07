@@ -1,0 +1,12 @@
+FROM ubuntu:18.04
+
+ENV LC_ALL=C.UTF-8
+ENV LANG=C.UTF-8
+
+WORKDIR /app
+
+RUN apt-get update -y
+RUN apt-get install --no-install-recommends -y python3.8 python3-pip python3-setuptools
+RUN pip3 install mlflow
+
+ENTRYPOINT ["mlflow", "ui", "-h", "0.0.0.0"]

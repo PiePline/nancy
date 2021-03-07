@@ -1,12 +1,48 @@
-
 version: '3'
 
 services:
   jenkins:
+    container_name: nancy_jenkins
     ports:
       - "8085:8080"
       - "23:22"
+      - 50000:50000
     build:
       context: .
       dockerfile: Dockerfile-jenkins
-  
+  s3:
+    container_name: nancy_s3
+    image: minio/minio
+    restart: unless-stopped
+    ports:
+      - 9000:9000
+    volumes:
+      - s3:/data
+    env_file:
+      - ./env/s3.env
+    command: server /data
+  mlflow:
+    container_name: nancy_mlflow
+    image: mlflow
+    build:
+      context: .
+      dockerfile: Dockerfile-mlflow
+    volumes:
+      - mlflow:/app/mlruns
+    ports:
+      - 5000:5000
+    network_mode: host
+
+volumes:
+  s3:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/docker/nancy/state/s3
+  mlflow:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /opt/docker/nancy/state/mlflow
