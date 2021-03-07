@@ -1,0 +1,18 @@
+stages:
+  dataset_stratification:
+    cmd: python dataset_stratification.py
+    deps:
+    - artifacts/dataset
+    - dataset_stratification.py
+    outs:
+    - artifacts\indices
+
+  train_resnet18:
+    cmd: python train.py -m resnet18
+    deps:
+    - artifacts/dataset
+    - train.py
+    - train_config/config.py
+    - train_config/train_config.py
+    outs:
+    - artifacts\train

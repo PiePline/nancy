@@ -5,15 +5,16 @@ import sys
 
 import numpy as np
 import torch
+from piepline.predict import Predictor
+from piepline.utils.fsm import FileStructManager
 from pietoolbelt.metrics.cpu.regression import amad, rmse, relative
-from piepline import FileStructManager, Predictor
 from tqdm import tqdm
 
-from train.train_config.dataset import create_dataset
-from train.train_config.train_config import ResNet18SegmentationTrainConfig, ResNet34SegmentationTrainConfig, MyTrainConfig
+from train_config.dataset import create_dataset
+from train_config.train_config import ResNet18SegmentationTrainConfig, ResNet34SegmentationTrainConfig, TrainConfig
 
 
-def predict(config_type: type(MyTrainConfig)):
+def predict(config_type: type(TrainConfig)):
     output_path = 'predicts'
     model = config_type.model_name
 

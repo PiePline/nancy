@@ -5,26 +5,38 @@ from typing import List, Tuple
 import cv2
 import numpy as np
 import torch
-from albumentations import Compose, GaussNoise
+from albumentations import Compose, GaussNoise, RandomGamma, RandomBrightnessContrast, HorizontalFlip, SmallestMaxSize, RandomCrop, \
+    OneOf, Resize
 
-from pietoolbelt.datasets.common import BasicDataset, get_root_by_env
+from pietoolbelt.datasets.common import BasicDataset
 from pietoolbelt.datasets.utils import AugmentedDataset
 
-from train.config import DATASET_LABELS
+from config import DATASET_LABELS, DATASET_ROOT
+from train_config.config import data_height, data_width
 
 
 class Dataset:
     def __init__(self):
-        root = get_root_by_env("CLOTHING_DATASET")
-
         self._items = []
-        for file in os.listdir(os.path.join(root, 'images_original')):
-            self._items.append(os.path.join(root, 'images_original', file))
+        for file in os.listdir(os.path.join(DATASET_ROOT, 'images_original')):
+            self._items.append(os.path.join(DATASET_ROOT, 'images_original', file))
 
         self._items.sort(key=lambda x: os.path.splitext(x)[0])
 
     def get_items(self) -> List[str]:
         return self._items
+
+
+class DebugDataset:
+    def __init__(self, dataset: BasicDataset, num: int):
+        self._num = num
+        self._dataset = dataset
+        
+    def __getitem__(self, item):
+        return self._dataset[item]
+    
+    def __len__(self):
+        return self._num
 
 
 def rle2mask(rle: [int], shape: Tuple[int, int]):
@@ -60,8 +72,13 @@ class Augmentations:
     def __init__(self, is_train: bool, to_pytorch: bool):
         if is_train:
             self._aug = Compose([
+                OneOf([Compose([SmallestMaxSize(max_size=min(data_height, data_width) * 1.1, p=1),
+                                RandomCrop(height=data_height, width=data_width, p=1)], p=1),
+                       Resize(height=data_height, width=data_width, p=1)], p=1),
                 GaussNoise(p=0.5),
-
+                RandomGamma(p=0.5),
+                RandomBrightnessContrast(p=0.5),
+                HorizontalFlip(p=0.5)
             ], p=1)
         else:
             self._aug = None
@@ -70,23 +87,24 @@ class Augmentations:
 
     def augmentate(self, data: {}):
         if self._aug is not None:
-            augmented = self._aug(image=data['data'])
-            img = augmented['image']
+            augmented = self._aug(image=data['data'], mask=data['target'])
+            img, mask = augmented['image'], augmented['mask']
         else:
-            img = data['data']
+            img, mask = data['data'], data['target']
 
         if self._need_to_pytorch:
             img = self.img_to_pytorch(img)
+            mask = self.target_to_pytorch(mask)
 
-        return {'data': img, 'target': self.data_to_pytorch(data['target'])}
+        return {'data': img, 'target': mask}
 
     @staticmethod
     def img_to_pytorch(image):
         return torch.from_numpy(np.moveaxis(image, -1, 0).astype(np.float32) / 128 - 1)
 
     @staticmethod
-    def data_to_pytorch(target):
-        return torch.from_numpy(target.astype(np.float32))
+    def target_to_pytorch(target):
+        return torch.from_numpy(np.expand_dims(target.astype(np.float32), 0) / (target.max() + 1e-7))
 
 
 def create_dataset(indices_path: str = None) -> 'LabeledDataset':
@@ -101,4 +119,5 @@ def create_augmented_dataset(is_train: bool, to_pytorch: bool = True, indices_pa
     dataset = create_dataset(indices_path)
     augs = Augmentations(is_train, to_pytorch)
 
+    # return AugmentedDataset(DebugDataset(dataset, 20)).add_aug(augs.augmentate)
     return AugmentedDataset(dataset).add_aug(augs.augmentate)

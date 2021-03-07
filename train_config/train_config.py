@@ -1,22 +1,25 @@
 import os
 from abc import ABCMeta, abstractmethod
 
-from pietoolbelt.datasets.utils import DatasetsContainer
-from pietoolbelt.losses.regression import RMSELoss
-from pietoolbelt.models import ResNet18, ModelsWeightsStorage, ModelWithActivation, ResNet34, ClassificationModel
-from piepline import TrainConfig, DataProducer, TrainStage, ValidationStage, MetricsProcessor, MetricsGroup
+from pietoolbelt.models.decoders.unet import UNetDecoder
 from torch import nn
 from torch.nn import Module
 from torch.optim import Adam
 
-from dataset import create_augmented_dataset
+from piepline.data_producer import DataProducer
+from piepline.train_config.stages import TrainStage, ValidationStage
+from piepline.train_config.train_config import BaseTrainConfig
+from pietoolbelt.datasets.utils import DatasetsContainer
+from pietoolbelt.losses.regression import RMSELoss
+from pietoolbelt.models import ResNet18, ModelsWeightsStorage, ModelWithActivation, ResNet34
 
-__all__ = ['MyTrainConfig', 'ResNet18SegmentationTrainConfig', 'ResNet34SegmentationTrainConfig']
+__all__ = ['TrainConfig', 'ResNet18SegmentationTrainConfig', 'ResNet34SegmentationTrainConfig']
 
-from .metrics import AMADMetric, RelativeMetric
+from train_config.dataset import create_augmented_dataset
+from config import INDICES_DIR
 
 
-class MyTrainConfig(TrainConfig, metaclass=ABCMeta):
+class TrainConfig(BaseTrainConfig, metaclass=ABCMeta):
     experiment_dir = 'train'
     batch_size = int('4')
     folds_num = 3
@@ -24,13 +27,11 @@ class MyTrainConfig(TrainConfig, metaclass=ABCMeta):
     def __init__(self, fold_indices: {}):
         model = self.create_model().cuda()
 
-        dir = os.path.join('data', 'indices')
-
         train_dts = []
         for indices in fold_indices['train']:
-            train_dts.append(create_augmented_dataset(is_train=True, indices_path=os.path.join(dir, indices + '.npy')))
+            train_dts.append(create_augmented_dataset(is_train=True, indices_path=os.path.join(INDICES_DIR, indices + '.npy')))
 
-        val_dts = create_augmented_dataset(is_train=False, indices_path=os.path.join(dir, fold_indices['val'] + '.npy'))
+        val_dts = create_augmented_dataset(is_train=True, indices_path=os.path.join(INDICES_DIR, fold_indices['val'] + '.npy'))
 
         workers_num = int('6')
         self._train_data_producer = DataProducer(DatasetsContainer(train_dts), batch_size=self.batch_size, num_workers=workers_num). \
@@ -38,13 +39,8 @@ class MyTrainConfig(TrainConfig, metaclass=ABCMeta):
         self._val_data_producer = DataProducer(val_dts, batch_size=self.batch_size, num_workers=workers_num). \
             global_shuffle(True).pin_memory(True)
 
-        train_metrics_proc = MetricsProcessor()
-        val_metrics_proc = MetricsProcessor()
-        train_metrics_proc.add_metrics_group(MetricsGroup('train').add(AMADMetric()).add(RelativeMetric()))
-        val_metrics_proc.add_metrics_group(MetricsGroup('validation').add(AMADMetric()).add(RelativeMetric()))
-
-        self.train_stage = TrainStage(self._train_data_producer, train_metrics_proc)
-        self.val_stage = ValidationStage(self._val_data_producer, val_metrics_proc)
+        self.train_stage = TrainStage(self._train_data_producer)
+        self.val_stage = ValidationStage(self._val_data_producer)
 
         loss = RMSELoss().cuda()
         optimizer = Adam(params=model.parameters(), lr=1e-4)
@@ -57,9 +53,9 @@ class MyTrainConfig(TrainConfig, metaclass=ABCMeta):
         pass
 
 
-class ResNet18SegmentationTrainConfig(MyTrainConfig):
+class ResNet18SegmentationTrainConfig(TrainConfig):
     model_name = 'resnet18'
-    experiment_dir = os.path.join(MyTrainConfig.experiment_dir, model_name)
+    experiment_dir = os.path.join(TrainConfig.experiment_dir, model_name)
 
     @staticmethod
     def create_model(pretrained: bool = True) -> Module:
@@ -67,16 +63,16 @@ class ResNet18SegmentationTrainConfig(MyTrainConfig):
         It is better to init model by separated method
         :return:
         """
-        enc = ResNet18(in_channels=2)
+        enc = ResNet18(in_channels=3)
         if pretrained:
-            ModelsWeightsStorage().load(enc, 'imagenet', params={'cin': 2})
-        model = ClassificationModel(enc, pool=nn.AdaptiveAvgPool2d((1, 1)), in_features=512, classes_num=98)
+            ModelsWeightsStorage().load(enc, 'imagenet')
+        model = UNetDecoder(enc, classes_num=1)
         return ModelWithActivation(model, activation='sigmoid')
 
 
-class ResNet34SegmentationTrainConfig(MyTrainConfig):
+class ResNet34SegmentationTrainConfig(TrainConfig):
     model_name = 'resnet34'
-    experiment_dir = os.path.join(MyTrainConfig.experiment_dir, model_name)
+    experiment_dir = os.path.join(TrainConfig.experiment_dir, model_name)
 
     @staticmethod
     def create_model(pretrained: bool = True) -> Module:
@@ -84,8 +80,8 @@ class ResNet34SegmentationTrainConfig(MyTrainConfig):
         It is better to init model by separated method
         :return:
         """
-        enc = ResNet34(in_channels=2)
+        enc = ResNet34(in_channels=3)
         if pretrained:
-            ModelsWeightsStorage().load(enc, 'imagenet', params={'cin': 2})
-        model = ClassificationModel(enc, pool=nn.AdaptiveAvgPool2d((1, 1)), in_features=512, classes_num=98)
+            ModelsWeightsStorage().load(enc, 'imagenet')
+        model = UNetDecoder(enc, classes_num=1)
         return ModelWithActivation(model, activation='sigmoid')
