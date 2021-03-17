@@ -28,3 +28,4 @@ RUN curl -L https://github.com/docker/compose/releases/download/${DOCKER_COMPOSE
 RUN usermod -aG docker jenkins && gpasswd -a jenkins docker && groupmod -g 1000 jenkins
 
 USER jenkins
+
